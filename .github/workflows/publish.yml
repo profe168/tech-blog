@@ -1,0 +1,54 @@
+name: Publish to Qiita
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'source/articles/*.md'
+      - 'source/articles/**/*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish_qiita:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: npm install -g pnpm && pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm run typecheck
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Convert and Sync Platforms
+        run: pnpm run publish
+
+      - name: Commit sync results
+        run: |
+          git config --local user.name "GitHub Action"
+          git config --local user.email "action@github.com"
+          git add platforms/
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-convert source to platforms" && git push)
+
+      - name: Publish Qiita articles
+        uses: increments/qiita-cli/actions/publish@v1
+        with:
+          qiita-token: ${{ secrets.QIITA_TOKEN }}
+          root: "./platforms/qiita"
+          commit-message: "Update Qiita Article ID [skip ci]"
