@@ -126,24 +126,24 @@ describe('convertToQiita', () => {
   it('ネストした記事を変換し、既存 ID を維持する', () => {
     const tempRoot = createTempDir();
     const sourceArticlesDir = path.join(tempRoot, 'source', 'articles');
-    const qiitaArticlesDir = path.join(tempRoot, 'platforms', 'qiita', 'articles');
+    const qiitaPublicDir = path.join(tempRoot, 'platforms', 'qiita', 'public');
 
     writeFile(
       path.join(sourceArticlesDir, 'nested', 'hello.md'),
       '---\ntitle: "Hello"\ntags: ["typescript", "qiita"]\n---\n\n![img](/images/train.jpg)\n'
     );
     writeFile(
-      path.join(qiitaArticlesDir, 'nested', 'hello.md'),
+      path.join(qiitaPublicDir, 'nested', 'hello.md'),
       '---\nid: abc123\ntitle: Old\ntags: ["old"]\nprivate: true\n---\n\nold\n'
     );
 
     convertToQiita({
       sourceArticlesDir,
-      qiitaArticlesDir,
+      qiitaPublicDir,
       imageBaseUrl: 'https://example.com/source'
     });
 
-    const output = matter.read(path.join(qiitaArticlesDir, 'nested', 'hello.md'));
+    const output = matter.read(path.join(qiitaPublicDir, 'nested', 'hello.md'));
     expect(output.data).toMatchObject({
       id: 'abc123',
       title: 'Hello',

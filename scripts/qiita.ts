@@ -20,7 +20,7 @@ const DEFAULT_QIITA_IMAGE_BASE_URL = 'https://cdn.jsdelivr.net/gh/profe168/tech-
 
 export interface QiitaConvertOptions {
   sourceArticlesDir?: string;
-  qiitaArticlesDir?: string;
+  qiitaPublicDir?: string;
   imageBaseUrl?: string;
 }
 
@@ -50,12 +50,12 @@ export function convertBodyForQiita(
  */
 function syncQiitaArticle(
   sourceArticlesDir: string,
-  qiitaArticlesDir: string,
+  qiitaPublicDir: string,
   sourceFile: string,
   imageBaseUrl?: string
 ) {
   const relativePath = path.relative(sourceArticlesDir, sourceFile);
-  const qiitaFile = path.join(qiitaArticlesDir, relativePath);
+  const qiitaFile = path.join(qiitaPublicDir, relativePath);
 
   const sourceContent = fs.readFileSync(sourceFile, 'utf8');
   const sourceParsed = matter(sourceContent);
@@ -89,13 +89,13 @@ function syncQiitaArticle(
  */
 export function convertToQiita(options: QiitaConvertOptions = {}) {
   const sourceArticlesDir = options.sourceArticlesDir ?? path.join(SOURCE_DIR, 'articles');
-  const qiitaArticlesDir = options.qiitaArticlesDir ?? path.join(QIITA_DIR, 'articles');
+  const qiitaPublicDir = options.qiitaPublicDir ?? path.join(QIITA_DIR, 'public');
 
-  cleanupRemovedFiles(sourceArticlesDir, qiitaArticlesDir);
+  cleanupRemovedFiles(sourceArticlesDir, qiitaPublicDir);
 
   const files = listFilesRecursive(sourceArticlesDir, file => file.endsWith('.md'));
 
   for (const file of files) {
-    syncQiitaArticle(sourceArticlesDir, qiitaArticlesDir, file, options.imageBaseUrl);
+    syncQiitaArticle(sourceArticlesDir, qiitaPublicDir, file, options.imageBaseUrl);
   }
 }
