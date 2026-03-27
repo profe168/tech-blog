@@ -3,9 +3,8 @@ title: Hello Zenn to Qiita Sync
 tags:
   - typescript
   - githubactions
-  - qiita
-  - zenn
-  - test
+  - 　"test"
+  - extra
 private: true
 updated_at: ''
 id: null
@@ -29,4 +28,4 @@ ignorePublish: false
 ## 画像のテスト
 画像の変換とコピーが正しく行われるかのテストです。
 
-![電車の画像](https://cdn.jsdelivr.net/gh/OWNER/REPO@main/source/images/train.jpg)
+![電車の画像](https://cdn.jsdelivr.net/gh/profe168/tech-blog@master/source/images/train.jpg)
