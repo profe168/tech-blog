@@ -11,7 +11,18 @@ export interface QiitaMetadata {
   title: string;
   tags: string[];
   private: boolean;
+  updated_at: string;
+  organization_url_name: string;
+  slide: boolean;
+  ignorePublish: boolean;
 }
+
+type ExistingQiitaMetadata = {
+  [K in keyof Pick<
+    QiitaMetadata,
+    'id' | 'updated_at' | 'organization_url_name' | 'slide' | 'ignorePublish'
+  >]?: unknown;
+};
 
 const QIITA_DIR = path.join(PLATFORMS_DIR, 'qiita');
 const DEFAULT_QIITA_PRIVATE = true;
@@ -45,6 +56,33 @@ export function convertBodyForQiita(
   return converted;
 }
 
+function readExistingQiitaMetadata(qiitaFile: string): ExistingQiitaMetadata {
+  if (!fs.existsSync(qiitaFile)) {
+    return {};
+  }
+
+  return matter.read(qiitaFile).data;
+}
+
+function createQiitaMetadata(
+  title: string,
+  tags: string[],
+  existingMetadata: ExistingQiitaMetadata
+): QiitaMetadata {
+  return {
+    id: typeof existingMetadata.id === 'string' ? existingMetadata.id : null,
+    title,
+    tags: tags.slice(0, QIITA_TAG_LIMIT),
+    private: DEFAULT_QIITA_PRIVATE,
+    updated_at: typeof existingMetadata.updated_at === 'string' ? existingMetadata.updated_at : '',
+    organization_url_name: typeof existingMetadata.organization_url_name === 'string'
+      ? existingMetadata.organization_url_name
+      : '',
+    slide: typeof existingMetadata.slide === 'boolean' ? existingMetadata.slide : false,
+    ignorePublish: typeof existingMetadata.ignorePublish === 'boolean' ? existingMetadata.ignorePublish : false
+  };
+}
+
 /**
  * 単独の記事を Qiita 向けに変換・保存
  */
@@ -67,16 +105,8 @@ function syncQiitaArticle(
     }
   })();
 
-  const currentId: string | null = fs.existsSync(qiitaFile)
-    ? matter(fs.readFileSync(qiitaFile, 'utf8')).data.id || null
-    : null;
-
-  const qiitaMetadata: QiitaMetadata = {
-    id: currentId,
-    title: metadata.title,
-    tags: metadata.tags.slice(0, QIITA_TAG_LIMIT),
-    private: DEFAULT_QIITA_PRIVATE
-  };
+  const existingMetadata = readExistingQiitaMetadata(qiitaFile);
+  const qiitaMetadata = createQiitaMetadata(metadata.title, metadata.tags, existingMetadata);
   const qiitaBody = convertBodyForQiita(sourceParsed.content, imageBaseUrl);
 
   fs.mkdirSync(path.dirname(qiitaFile), { recursive: true });

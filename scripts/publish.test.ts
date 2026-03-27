@@ -134,7 +134,7 @@ describe('convertToQiita', () => {
     );
     writeFile(
       path.join(qiitaPublicDir, 'nested', 'hello.md'),
-      '---\nid: abc123\ntitle: Old\ntags: ["old"]\nprivate: true\n---\n\nold\n'
+      '---\nid: abc123\ntitle: Old\ntags: ["old"]\nprivate: true\nupdated_at: "2026-03-28T00:00:00+09:00"\norganization_url_name: ""\nslide: true\nignorePublish: false\n---\n\nold\n'
     );
 
     convertToQiita({
@@ -148,9 +148,42 @@ describe('convertToQiita', () => {
       id: 'abc123',
       title: 'Hello',
       tags: ['typescript', 'qiita'],
-      private: true
+      private: true,
+      updated_at: '2026-03-28T00:00:00+09:00',
+      organization_url_name: '',
+      slide: true,
+      ignorePublish: false
     });
     expect(output.content).toContain('![img](https://example.com/source/images/train.jpg)');
+  });
+
+  it('既存メタデータがなくても Qiita CLI 必須項目を補完する', () => {
+    const tempRoot = createTempDir();
+    const sourceArticlesDir = path.join(tempRoot, 'source', 'articles');
+    const qiitaPublicDir = path.join(tempRoot, 'platforms', 'qiita', 'public');
+
+    writeFile(
+      path.join(sourceArticlesDir, 'hello.md'),
+      '---\ntitle: "Hello"\ntags: ["typescript"]\n---\n\nbody\n'
+    );
+
+    convertToQiita({
+      sourceArticlesDir,
+      qiitaPublicDir,
+      imageBaseUrl: 'https://example.com/source'
+    });
+
+    const output = matter.read(path.join(qiitaPublicDir, 'hello.md'));
+    expect(output.data).toMatchObject({
+      id: null,
+      title: 'Hello',
+      tags: ['typescript'],
+      private: true,
+      updated_at: '',
+      organization_url_name: '',
+      slide: false,
+      ignorePublish: false
+    });
   });
 });
 
