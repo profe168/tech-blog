@@ -1,6 +1,6 @@
 ---
 title: "Hello Zenn to Qiita Sync"
-topics: ["typescript", "githubactions",　"test", "extra"]
+tags: ["typescript", "githubactions", "test", "extra"]
 ---
 
 # ZennからQiitaへの同時投稿テスト

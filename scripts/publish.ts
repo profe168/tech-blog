@@ -1,17 +1,21 @@
-import { syncToZenn } from './zenn';
-import { syncToQiita } from './qiita';
+import { pathToFileURL } from 'node:url';
+import { syncToZenn } from './zenn.js';
+import { convertToQiita } from './qiita.js';
 
 function main() {
-  // 1. Zenn: 同期実行
+  // Zenn: 変換せずに同期
   syncToZenn();
   console.log('✅ Zenn distribution completed!');
 
-  // 2. Qiita: 変換しながら出力
-  syncToQiita();
+  // Qiita: 記事を変換して出力
+  convertToQiita();
   console.log('✅ Qiita distribution completed!');
 }
 
-// 直接実行時のみメイン処理を動かす（テスト時は動かさない）
-if (typeof require !== 'undefined' && require.main === module) {
+// ローカルかCI実行時のみ実行（テスト時は実行しない）
+const isMainModule = process.argv[1] != null
+  && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isMainModule) {
   main();
 }

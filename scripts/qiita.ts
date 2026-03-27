@@ -1,79 +1,45 @@
-import path from 'path';
-import fs from 'fs';
+import fs from 'node:fs';
+import path from 'node:path';
 import matter from 'gray-matter';
-import { PLATFORMS_DIR, SOURCE_DIR, cleanupRemovedFiles, SourceMetadata } from './shared';
+import { PLATFORMS_DIR, SOURCE_DIR, cleanupRemovedFiles, listFilesRecursive, parseSourceMetadata } from './shared.js';
 
 /**
  * Qiita の記事メタデータ型
  */
 export interface QiitaMetadata {
+  id: string | null;
   title: string;
   tags: string[];
   private: boolean;
-  updated_at: string;
-  id: string | null;
-  organization_url_name: string | null;
-  slide: boolean;
-  ignorePublish: boolean;
 }
 
 const QIITA_DIR = path.join(PLATFORMS_DIR, 'qiita');
 const DEFAULT_QIITA_PRIVATE = true;
-const DEFAULT_QIITA_TAGS = ['zenn'];
+const QIITA_TAG_LIMIT = 5;
+const DEFAULT_QIITA_IMAGE_BASE_URL = 'https://cdn.jsdelivr.net/gh/profe168/tech-blog@master/source';
 
-/**
- * 読み込んだデータが正しいメタデータかを判定する型ガード
- */
-function isValidMetadata(data: unknown): data is SourceMetadata {
-  return typeof data === 'object'
-    && data !== null
-    && 'title' in data
-    && typeof data.title === 'string';
-}
-
-/**
- * メタデータの変換 (Zenn -> Qiita)
- */
-function buildQiitaMetadata(
-  sourceData: SourceMetadata,
-  currentQiitaId: string | null
-): QiitaMetadata {
-  const qiitaTags = Array.isArray(sourceData.topics)
-    ? sourceData.topics.slice(0, 5)
-    : DEFAULT_QIITA_TAGS;
-
-  return {
-    title: sourceData.title,
-    tags: qiitaTags,
-    private: DEFAULT_QIITA_PRIVATE,
-    updated_at: '',
-    id: currentQiitaId,
-    organization_url_name: null,
-    slide: false,
-    ignorePublish: false
-  };
+export interface QiitaConvertOptions {
+  sourceArticlesDir?: string;
+  qiitaArticlesDir?: string;
+  imageBaseUrl?: string;
 }
 
 /**
  * 本文の変換 (Zenn 特有の記法を Qiita 向けに変換、CDN経由の画像URLへ置換)
  */
-export function convertBodyForQiita(body: string): string {
+export function convertBodyForQiita(
+  body: string,
+  imageBaseUrl: string = process.env.QIITA_IMAGE_BASE_URL ?? DEFAULT_QIITA_IMAGE_BASE_URL
+): string {
   // 1. :::message -> :::note info / :::message alert -> :::note warn
-  let converted = body.replace(/:::message( alert)?\n([\s\S]*?)\n:::/g, (match, alert, content) => {
+  let converted = body.replace(/:::message( alert)?\n([\s\S]*?)\n:::/g, (_match, alert, content) => {
     const type = alert ? 'warn' : 'info';
     return `:::note ${type}\n${content.trim()}\n:::`;
   });
 
-  // 2. "/images/..." 絶対パス -> jsDelivr経由のCDN URL
-  const repo = process.env.GITHUB_REPOSITORY;
-  const branch = process.env.GITHUB_REF_NAME;
-  const qiitaImageBaseUrl = repo && branch
-    ? `https://cdn.jsdelivr.net/gh/${repo}@${branch}/source`
-    : null;
-
-  if (qiitaImageBaseUrl) {
-    converted = converted.replace(/!\[(.*?)\]\((\/images\/.*?)\)/g, `![$1](${qiitaImageBaseUrl}$2)`);
-  }
+  // 2. "/images/..." 絶対パス -> 固定の公開 URL に変換
+  const normalizedImageBaseUrl = imageBaseUrl.replace(/\/$/, '');
+  converted = converted.replace(/!\[(.*?)\]\((\/images\/.*?)\)/g, `![$1](${normalizedImageBaseUrl}$2)`);
   converted = converted.replace(/!\[(.*?)\]\((.*?)\s*=\d+x\d*\)/g, `![$1]($2)`);
 
   return converted;
@@ -82,43 +48,54 @@ export function convertBodyForQiita(body: string): string {
 /**
  * 単独の記事を Qiita 向けに変換・保存
  */
-function syncQiitaArticle(sourceFile: string) {
-  const filename = path.basename(sourceFile);
-  const qiitaFile = path.join(QIITA_DIR, 'articles', filename);
+function syncQiitaArticle(
+  sourceArticlesDir: string,
+  qiitaArticlesDir: string,
+  sourceFile: string,
+  imageBaseUrl?: string
+) {
+  const relativePath = path.relative(sourceArticlesDir, sourceFile);
+  const qiitaFile = path.join(qiitaArticlesDir, relativePath);
 
   const sourceContent = fs.readFileSync(sourceFile, 'utf8');
   const sourceParsed = matter(sourceContent);
+  const metadata = (() => {
+    try {
+      return parseSourceMetadata(sourceParsed.data);
+    } catch {
+      throw new Error(`${relativePath} is missing required metadata: title, tags`);
+    }
+  })();
 
   const currentId: string | null = fs.existsSync(qiitaFile)
     ? matter(fs.readFileSync(qiitaFile, 'utf8')).data.id || null
     : null;
 
-  if (!isValidMetadata(sourceParsed.data)) {
-    throw new Error(`${filename} is missing required metadata: title`);
-  }
+  const qiitaMetadata: QiitaMetadata = {
+    id: currentId,
+    title: metadata.title,
+    tags: metadata.tags.slice(0, QIITA_TAG_LIMIT),
+    private: DEFAULT_QIITA_PRIVATE
+  };
+  const qiitaBody = convertBodyForQiita(sourceParsed.content, imageBaseUrl);
 
-  const qiitaMetadata = buildQiitaMetadata(sourceParsed.data, currentId);
-  const qiitaBody = convertBodyForQiita(sourceParsed.content);
-
+  fs.mkdirSync(path.dirname(qiitaFile), { recursive: true });
   const output = matter.stringify(qiitaBody, qiitaMetadata);
   fs.writeFileSync(qiitaFile, output, 'utf8');
 }
 
 /**
- * Qiita プラットフォームへの同期処理
+ * Qiita 向け記事の変換・出力処理
  */
-export function syncToQiita() {
-  const sourceArticlesDir = path.join(SOURCE_DIR, 'articles');
-  const qiitaArticlesDir = path.join(PLATFORMS_DIR, 'qiita', 'articles');
+export function convertToQiita(options: QiitaConvertOptions = {}) {
+  const sourceArticlesDir = options.sourceArticlesDir ?? path.join(SOURCE_DIR, 'articles');
+  const qiitaArticlesDir = options.qiitaArticlesDir ?? path.join(QIITA_DIR, 'articles');
 
   cleanupRemovedFiles(sourceArticlesDir, qiitaArticlesDir);
 
-  const files = fs.readdirSync(sourceArticlesDir).filter(file => {
-    const sourceFile = path.join(sourceArticlesDir, file);
-    return file.endsWith('.md') && fs.statSync(sourceFile).isFile();
-  });
+  const files = listFilesRecursive(sourceArticlesDir, file => file.endsWith('.md'));
 
   for (const file of files) {
-    syncQiitaArticle(path.join(sourceArticlesDir, file));
+    syncQiitaArticle(sourceArticlesDir, qiitaArticlesDir, file, options.imageBaseUrl);
   }
 }
